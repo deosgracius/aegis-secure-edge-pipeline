@@ -1,0 +1,71 @@
+"""
+db.py -- the control-plane database (SQLAlchemy 2.0 + SQLite).
+
+Three tables, the system of record the AI agent will later reason over:
+  Device     -- one row per device in the topology (+ live status)
+  Telemetry  -- every reading the gateway forwards (features + the FPGA verdict)
+  Incident   -- opened automatically whenever a suspicious verdict arrives
+"""
+
+import os
+from datetime import datetime, timezone
+
+from sqlalchemy import ForeignKey, String, create_engine
+from sqlalchemy.orm import (DeclarativeBase, Mapped, mapped_column,
+                            relationship, sessionmaker)
+
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "aegis.db")
+engine = create_engine("sqlite:///%s" % DB_PATH, echo=False)
+SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
+
+
+def _now():
+    return datetime.now(timezone.utc)
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class Device(Base):
+    __tablename__ = "devices"
+    id:          Mapped[str] = mapped_column(String, primary_key=True)
+    name:        Mapped[str]
+    type:        Mapped[str]
+    criticality: Mapped[str]
+    status:      Mapped[str] = mapped_column(default="active")  # active | quarantined
+
+    telemetry = relationship("Telemetry", back_populates="device")
+    incidents = relationship("Incident", back_populates="device")
+
+
+class Telemetry(Base):
+    __tablename__ = "telemetry"
+    id:        Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    device_id: Mapped[str] = mapped_column(ForeignKey("devices.id"))
+    seq:       Mapped[int]
+    f0:        Mapped[int]
+    f1:        Mapped[int]
+    f2:        Mapped[int]
+    f3:        Mapped[int]
+    verdict:   Mapped[int]   # 0 normal, 1 suspicious
+    score:     Mapped[int]   # 0..255
+    ts:        Mapped[datetime] = mapped_column(default=_now)
+
+    device = relationship("Device", back_populates="telemetry")
+
+
+class Incident(Base):
+    __tablename__ = "incidents"
+    id:        Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    device_id: Mapped[str] = mapped_column(ForeignKey("devices.id"))
+    score:     Mapped[int]
+    status:    Mapped[str] = mapped_column(default="open")  # open | ack | resolved
+    summary:   Mapped[str]
+    ts:        Mapped[datetime] = mapped_column(default=_now)
+
+    device = relationship("Device", back_populates="incidents")
+
+
+def init_db():
+    Base.metadata.create_all(engine)
