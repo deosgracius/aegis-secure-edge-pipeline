@@ -18,6 +18,7 @@ runs entirely on a laptop — no FPGA board, no sensor hardware required.
 | `knowledge-graph/` | Topology graph the AI agent reasons over (downstream/blast-radius). | ✅ local + Cypher; needs a fresh Aura instance to go live |
 | `control-plane/` | FastAPI + SQLite system of record: ingest, incidents, graph-backed impact API. | ✅ working (runs on the `.venv`) |
 | `agent/` | LangGraph AI agent: investigates anomalies via tools + runbook RAG, proposes remediation behind a human-approval gate. | ✅ working; 5/5 golden evals pass |
+| `dashboard/` | React + TS + Vite security-ops UI: topology, anomaly feed, approval queue (approve/reject). | ✅ working; verified in browser |
 | `PROTOCOL.md` | The shared binary frame format (C ⇄ Python). | ✅ |
 
 ## Run everything (from PowerShell, with `C:\mingw64\bin` on PATH for gcc)
