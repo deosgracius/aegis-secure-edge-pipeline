@@ -42,6 +42,19 @@ the AI agent and the dashboard will both read from.
 | GET  | `/investigations` | AI-agent investigation audit records (diagnosis, proposal, decision, transcript) |
 | GET  | `/approvals` | the approval queue — investigations awaiting a human decision |
 | POST | `/investigations/{id}/decision` | approve/reject a queued investigation (executes if approved + safe) |
+| GET  | `/audit` | the append-only audit log (admin only) |
+
+## Auth & RBAC
+
+Every endpoint except `/health` requires `Authorization: Bearer <token>`. Roles
+form a ladder — **viewer** (read) < **operator** (+ ingest / quarantine /
+approve-reject) < **admin** (+ read `/audit`). Demo tokens seeded on startup:
+`viewer-demo-token`, `operator-demo-token`, `admin-demo-token` (the dashboard
+uses the operator token). Every mutating action is written to the audit log with
+the authenticated actor — the actor is never taken from the request body.
+
+The upgrade path keeps the same role checks: swap the static tokens for
+OAuth/OIDC + MFA-issued sessions.
 
 ## What it proves
 

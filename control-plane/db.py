@@ -68,6 +68,25 @@ class Incident(Base):
     device = relationship("Device", back_populates="incidents")
 
 
+class User(Base):
+    """An operator of the platform. Role gates what they can do (RBAC)."""
+    __tablename__ = "users"
+    id:    Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name:  Mapped[str] = mapped_column(unique=True)
+    role:  Mapped[str]                          # viewer | operator | admin
+    token: Mapped[str] = mapped_column(unique=True)   # bearer token (demo auth)
+
+
+class AuditLog(Base):
+    """Append-only record of every security-relevant action (who did what)."""
+    __tablename__ = "audit_log"
+    id:     Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    actor:  Mapped[str]
+    action: Mapped[str]
+    detail: Mapped[str] = mapped_column(Text)
+    ts:     Mapped[datetime] = mapped_column(default=_now)
+
+
 class Investigation(Base):
     """An auditable record of the AI agent investigating an incident:
     what it concluded, what it proposed, the human decision, and the outcome."""

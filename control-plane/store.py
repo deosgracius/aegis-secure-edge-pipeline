@@ -10,8 +10,16 @@ import json
 import os
 import sys
 
-from db import (Device, Incident, Investigation, SessionLocal, Telemetry,
-                init_db)
+from db import (AuditLog, Device, Incident, Investigation, SessionLocal,
+                Telemetry, User, init_db)
+
+# Demo users. In production these come from an identity provider (OAuth/OIDC)
+# and tokens are short-lived + MFA-gated; the role checks stay identical.
+DEMO_USERS = [
+    {"name": "viewer",   "role": "viewer",   "token": "viewer-demo-token"},
+    {"name": "operator", "role": "operator", "token": "operator-demo-token"},
+    {"name": "admin",    "role": "admin",    "token": "admin-demo-token"},
+]
 
 # pull in the knowledge-graph queries from the sibling folder
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -24,14 +32,39 @@ import topology    # noqa: E402
 # setup / seeding
 # ---------------------------------------------------------------------------
 def setup():
-    """Create tables and seed devices from the topology (idempotent)."""
+    """Create tables and seed devices + users (idempotent)."""
     init_db()
     with SessionLocal() as s:
         for did, a in topology.DEVICES.items():
             if s.get(Device, did) is None:
                 s.add(Device(id=did, name=a["name"], type=a["type"],
                              criticality=a["criticality"], status="active"))
+        for u in DEMO_USERS:
+            if not s.query(User).filter(User.name == u["name"]).first():
+                s.add(User(name=u["name"], role=u["role"], token=u["token"]))
         s.commit()
+
+
+# ---------------------------------------------------------------------------
+# auth + audit
+# ---------------------------------------------------------------------------
+def get_user_by_token(token):
+    with SessionLocal() as s:
+        u = s.query(User).filter(User.token == token).first()
+        return {"name": u.name, "role": u.role} if u else None
+
+
+def write_audit(actor, action, detail):
+    with SessionLocal() as s:
+        s.add(AuditLog(actor=actor, action=action, detail=detail))
+        s.commit()
+
+
+def list_audit(limit=100):
+    with SessionLocal() as s:
+        rows = s.query(AuditLog).order_by(AuditLog.id.desc()).limit(limit)
+        return [{"id": a.id, "actor": a.actor, "action": a.action,
+                 "detail": a.detail, "ts": a.ts.isoformat()} for a in rows]
 
 
 # ---------------------------------------------------------------------------
