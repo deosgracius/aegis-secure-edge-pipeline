@@ -39,6 +39,9 @@ the AI agent and the dashboard will both read from.
 | GET  | `/incidents?status=open` | incidents the agent will triage |
 | GET  | `/devices/{id}/impact` | blast radius via the knowledge graph (safe to quarantine?) |
 | POST | `/devices/{id}/status` | quarantine / reactivate |
+| GET  | `/investigations` | AI-agent investigation audit records (diagnosis, proposal, decision, transcript) |
+| GET  | `/approvals` | the approval queue — investigations awaiting a human decision |
+| POST | `/investigations/{id}/decision` | approve/reject a queued investigation (executes if approved + safe) |
 
 ## What it proves
 

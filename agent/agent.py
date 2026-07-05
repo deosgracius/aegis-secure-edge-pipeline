@@ -179,10 +179,16 @@ def run_tools(state: AgentState) -> AgentState:
     return state
 
 
-_APPROVER = None   # set by investigate(); the approval node reads it
+QUEUE = "__queue__"   # sentinel: propose and stop, leaving it for a human
+_APPROVER = None      # set by investigate(); the approval node reads it
 
 
 def approval(state: AgentState) -> AgentState:
+    if _APPROVER == QUEUE:
+        # dashboard flow: don't decide here — leave it in the approval queue
+        state["decision"] = None
+        state["steps"].append("queued for human approval")
+        return state
     approver = _APPROVER or auto_approver
     decision = approver(state["proposal"])
     state["decision"] = decision
@@ -193,7 +199,8 @@ def approval(state: AgentState) -> AgentState:
 
 
 def route_after_approval(state: AgentState) -> str:
-    if state["decision"]["approved"] and state["proposal"]["action"] == "quarantine":
+    decision = state.get("decision")
+    if decision and decision["approved"] and state["proposal"]["action"] == "quarantine":
         return "execute"
     return END
 
@@ -259,14 +266,31 @@ def build_graph():
     return g.compile()
 
 
-def investigate(device_id, incident_summary, approver=None):
-    """Run the full investigation for one incident. Returns the final state."""
+def investigate(device_id, incident_summary, approver=None,
+                incident_id=None, persist=True):
+    """Run the full investigation for one incident. Returns the final state.
+
+    If persist=True, writes an audit Investigation record to the control plane
+    (proposal + decision + result + transcript). Pass approver=agent.QUEUE to
+    propose and leave the decision to a human via the dashboard/API.
+    """
     global _APPROVER
     _APPROVER = approver
     graph = build_graph()
     state: AgentState = {"device_id": device_id,
                          "incident_summary": incident_summary}
-    return graph.invoke(state, {"recursion_limit": 50})
+    final = graph.invoke(state, {"recursion_limit": 50})
+
+    if persist and final.get("proposal"):
+        final["investigation_id"] = agent_tools.store.save_investigation(
+            device_id=device_id,
+            proposal=final["proposal"],
+            transcript=final.get("steps", []),
+            incident_id=incident_id,
+            decision=final.get("decision"),
+            result=final.get("result"),
+        )
+    return final
 
 
 if __name__ == "__main__":

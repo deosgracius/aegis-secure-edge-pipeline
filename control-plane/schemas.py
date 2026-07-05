@@ -14,3 +14,10 @@ class TelemetryIn(BaseModel):
 
 class StatusIn(BaseModel):
     status: str  # "active" | "quarantined"
+
+
+class DecisionIn(BaseModel):
+    """A human's decision on a queued investigation (from the dashboard)."""
+    approved: bool
+    by: str
+    note: str = ""

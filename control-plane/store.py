@@ -6,10 +6,12 @@ demo/test OR from the FastAPI endpoints in main.py -- no HTTP required to verify
 the logic. This is also where the knowledge graph plugs into the control plane.
 """
 
+import json
 import os
 import sys
 
-from db import Device, Incident, SessionLocal, Telemetry, init_db
+from db import (Device, Incident, Investigation, SessionLocal, Telemetry,
+                init_db)
 
 # pull in the knowledge-graph queries from the sibling folder
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -125,8 +127,114 @@ def set_device_status(device_id, status):
 
 
 # ---------------------------------------------------------------------------
+# investigations + approval queue (the AI agent writes here; humans act here)
+# ---------------------------------------------------------------------------
+def save_investigation(device_id, proposal, transcript,
+                       incident_id=None, decision=None, result=None):
+    """Persist one agent investigation as an audit record. Returns its id.
+
+    status is derived: proposed -> approved/rejected (decision) -> executed/blocked (result).
+    """
+    status = "proposed"
+    if decision is not None:
+        status = "approved" if decision.get("approved") else "rejected"
+    if result is not None:
+        status = result.get("action", status)
+        if status == "quarantined":
+            status = "executed"
+    with SessionLocal() as s:
+        inv = Investigation(
+            incident_id=incident_id, device_id=device_id,
+            diagnosis=proposal.get("diagnosis", ""),
+            reasoning=proposal.get("reasoning", ""),
+            runbook=proposal.get("runbook"),
+            proposed_action=proposal.get("action", ""),
+            target_device=proposal.get("target_device", device_id),
+            status=status,
+            decided_by=(decision or {}).get("by"),
+            decision_note=(decision or {}).get("note"),
+            result=json.dumps(result) if result is not None else None,
+            transcript=json.dumps(transcript or []),
+        )
+        s.add(inv)
+        s.commit()
+        return inv.id
+
+
+def list_investigations(status=None):
+    with SessionLocal() as s:
+        q = s.query(Investigation)
+        if status:
+            q = q.filter(Investigation.status == status)
+        return [_inv_full(i) for i in q.order_by(Investigation.id.desc())]
+
+
+def approval_queue():
+    """Investigations still awaiting a human decision (what the dashboard shows)."""
+    return list_investigations(status="proposed")
+
+
+def get_investigation(inv_id):
+    with SessionLocal() as s:
+        inv = s.get(Investigation, inv_id)
+        return _inv_full(inv) if inv else None
+
+
+def decide_investigation(inv_id, approved, by, note=""):
+    """Record a human decision on a queued investigation, and act if approved.
+
+    This is the API-driven approval path (the dashboard calls it). Enforces the
+    same guardrail as the agent: never quarantine a single point of failure.
+    """
+    with SessionLocal() as s:
+        inv = s.get(Investigation, inv_id)
+        if inv is None:
+            raise ValueError("unknown investigation: %s" % inv_id)
+        if inv.status != "proposed":
+            raise ValueError("investigation %s already %s" % (inv_id, inv.status))
+        inv.decided_by = by
+        inv.decision_note = note
+        if not approved:
+            inv.status = "rejected"
+            s.commit()
+            return _inv_full(inv)
+        inv.status = "approved"
+        s.commit()
+
+    if inv.proposed_action == "quarantine":
+        impact = device_impact(inv.target_device)
+        if not impact["safe_to_quarantine"]:
+            _set_inv(inv_id, status="blocked",
+                     result={"action": "blocked",
+                             "reason": "guardrail: %s is a single point of failure"
+                                       % inv.target_device})
+        else:
+            dev = set_device_status(inv.target_device, "quarantined")
+            _set_inv(inv_id, status="executed",
+                     result={"action": "quarantined", "device": dev["name"]})
+    return get_investigation(inv_id)
+
+
+def _set_inv(inv_id, status, result):
+    with SessionLocal() as s:
+        inv = s.get(Investigation, inv_id)
+        inv.status = status
+        inv.result = json.dumps(result)
+        s.commit()
+
+
+# ---------------------------------------------------------------------------
 # serializers
 # ---------------------------------------------------------------------------
+def _inv_full(i):
+    return {"id": i.id, "incident_id": i.incident_id, "device_id": i.device_id,
+            "diagnosis": i.diagnosis, "reasoning": i.reasoning, "runbook": i.runbook,
+            "proposed_action": i.proposed_action, "target_device": i.target_device,
+            "status": i.status, "decided_by": i.decided_by,
+            "decision_note": i.decision_note,
+            "result": json.loads(i.result) if i.result else None,
+            "transcript": json.loads(i.transcript) if i.transcript else [],
+            "ts": i.ts.isoformat()}
 def _dev_dict(d):
     return {"id": d.id, "name": d.name, "type": d.type,
             "criticality": d.criticality, "status": d.status}

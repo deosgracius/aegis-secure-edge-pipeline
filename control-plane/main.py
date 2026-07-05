@@ -20,7 +20,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 
 import store
-from schemas import StatusIn, TelemetryIn
+from schemas import DecisionIn, StatusIn, TelemetryIn
 
 
 @asynccontextmanager
@@ -74,3 +74,22 @@ def set_status(device_id: str, body: StatusIn):
         return store.set_device_status(device_id, body.status)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.get("/investigations")
+def investigations(status: str | None = None):
+    return store.list_investigations(status)
+
+
+@app.get("/approvals")
+def approvals():
+    """The approval queue: investigations awaiting a human decision."""
+    return store.approval_queue()
+
+
+@app.post("/investigations/{inv_id}/decision")
+def decide(inv_id: int, body: DecisionIn):
+    try:
+        return store.decide_investigation(inv_id, body.approved, body.by, body.note)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))

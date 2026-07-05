@@ -12,6 +12,16 @@ venv/
 *.vvp
 *.vcd
 
+# Vivado build artifacts
+vivado_out/
+*.bit
+vivado*.jou
+vivado*.log
+.Xil/
+*.cache/
+*.runs/
+*.hw/
+
 # Compiled binaries
 *.exe
 *.o

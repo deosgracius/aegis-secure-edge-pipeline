@@ -9,8 +9,9 @@ Three tables, the system of record the AI agent will later reason over:
 
 import os
 from datetime import datetime, timezone
+from typing import Optional
 
-from sqlalchemy import ForeignKey, String, create_engine
+from sqlalchemy import ForeignKey, String, Text, create_engine
 from sqlalchemy.orm import (DeclarativeBase, Mapped, mapped_column,
                             relationship, sessionmaker)
 
@@ -65,6 +66,27 @@ class Incident(Base):
     ts:        Mapped[datetime] = mapped_column(default=_now)
 
     device = relationship("Device", back_populates="incidents")
+
+
+class Investigation(Base):
+    """An auditable record of the AI agent investigating an incident:
+    what it concluded, what it proposed, the human decision, and the outcome."""
+    __tablename__ = "investigations"
+    id:              Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    incident_id:     Mapped[Optional[int]] = mapped_column(ForeignKey("incidents.id"))
+    device_id:       Mapped[str] = mapped_column(ForeignKey("devices.id"))
+    diagnosis:       Mapped[str]
+    reasoning:       Mapped[str] = mapped_column(Text)
+    runbook:         Mapped[Optional[str]]
+    proposed_action: Mapped[str]                 # quarantine | notify_operator | no_action
+    target_device:   Mapped[str]
+    status:          Mapped[str] = mapped_column(default="proposed")
+    #                proposed | approved | rejected | executed | blocked
+    decided_by:      Mapped[Optional[str]]
+    decision_note:   Mapped[Optional[str]]
+    result:          Mapped[Optional[str]]
+    transcript:      Mapped[str] = mapped_column(Text)   # JSON array of steps
+    ts:              Mapped[datetime] = mapped_column(default=_now)
 
 
 def init_db():
