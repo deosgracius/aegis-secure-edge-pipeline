@@ -1,0 +1,13 @@
+# AEGIS -- run the control plane with:  docker compose up --build
+# The dashboard is a static Vite app; run it separately with `npm run dev`
+# (it proxies /api to this service on port 8000).
+services:
+  control-plane:
+    build: .
+    image: aegis-control-plane
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    # ANTHROPIC_API_KEY is only needed if you run the agent inside the stack;
+    # the control plane itself does not call the model.

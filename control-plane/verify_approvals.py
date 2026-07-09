@@ -71,18 +71,19 @@ def main():
     assert len(store.list_investigations()) == 3
     print("[ok] queue empty; 3 records in history")
 
-    # --- REST layer ---
+    # --- REST layer (endpoints now require an operator bearer token) ---
     from fastapi.testclient import TestClient
     import main
+    op = {"Authorization": "Bearer operator-demo-token"}
     with TestClient(main.app) as c:
         iid = store.save_investigation("sn1", fake_proposal("notify_operator", "sn1"), ["s"])
-        assert len(c.get("/approvals").json()) == 1
-        resp = c.post("/investigations/%d/decision" % iid,
+        assert len(c.get("/approvals", headers=op).json()) == 1
+        resp = c.post("/investigations/%d/decision" % iid, headers=op,
                       json={"approved": True, "by": "carol", "note": "ok"})
         assert resp.status_code == 200, resp.text
         assert resp.json()["status"] == "approved", resp.json()
-        assert len(c.get("/approvals").json()) == 0
-        print("[ok] REST: /approvals + POST decision working")
+        assert len(c.get("/approvals", headers=op).json()) == 0
+        print("[ok] REST: /approvals + POST decision working (authenticated)")
 
     print("-" * 60)
     print(">>> PASS: investigation audit trail + approval queue + guardrail all work.")

@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  control-plane:
+    name: Control plane (auth / RBAC / audit / approvals)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r control-plane/requirements.txt
+      - name: Approval-workflow + guardrail tests
+        working-directory: control-plane
+        run: python verify_approvals.py
+      - name: Auth / RBAC / audit tests
+        working-directory: control-plane
+        run: python verify_auth.py
+
+  fpga-embedded:
+    name: FPGA scorer + embedded protocol
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Icarus Verilog + gcc
+        run: sudo apt-get update && sudo apt-get install -y iverilog gcc
+      - name: Train model + generate Verilog
+        working-directory: fpga-scorer
+        run: python build.py
+      - name: RTL correctness (hardware == Python, 500 vectors)
+        working-directory: fpga-scorer
+        run: |
+          iverilog -o sim_c.vvp scorer.v tb_correctness.v
+          vvp sim_c.vvp | tee result_c.txt
+          grep -q "PASS: the hardware matches Python" result_c.txt
+      - name: RTL latency + jitter
+        working-directory: fpga-scorer
+        run: |
+          iverilog -o sim_l.vvp scorer.v scorer_pipe.v tb_latency.v
+          vvp sim_l.vvp | tee result_l.txt
+          grep -q "Zero jitter" result_l.txt
+      - name: Cross-language protocol (C node <-> Python gateway)
+        run: python integration_test.py
+
+  docker-build:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build control-plane image
+        run: docker build -t aegis-control-plane .

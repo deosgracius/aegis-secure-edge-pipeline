@@ -1,0 +1,3 @@
+# The agent tier needs these on top of the control-plane requirements.
+anthropic==0.109.1
+langgraph==1.2.6

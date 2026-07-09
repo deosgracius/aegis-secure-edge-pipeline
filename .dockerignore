@@ -1,0 +1,11 @@
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/aegis.db
+dashboard/node_modules/
+dashboard/dist/
+fpga-scorer/*.vvp
+fpga-scorer/basys3/vivado_out/
+sensor-node/*.exe
+.git/
+.github/

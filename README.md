@@ -1,5 +1,7 @@
 # AEGIS
 
+![CI](https://github.com/deosgracius/aegis-secure-edge-pipeline/actions/workflows/ci.yml/badge.svg)
+
 A secure-by-design, hardware-accelerated edge pipeline: secure sensor nodes emit
 an authenticated binary feed → an FPGA scores it for anomalies at deterministic
 latency → a gateway runs an AI security agent (later) that reasons about posture
@@ -19,7 +21,26 @@ runs entirely on a laptop — no FPGA board, no sensor hardware required.
 | `control-plane/` | FastAPI + SQLite system of record: ingest, incidents, graph-backed impact API. | ✅ working (runs on the `.venv`) |
 | `agent/` | LangGraph AI agent: investigates anomalies via tools + runbook RAG, proposes remediation behind a human-approval gate. | ✅ working; 5/5 golden evals pass |
 | `dashboard/` | React + TS + Vite security-ops UI: topology, anomaly feed, approval queue (approve/reject). | ✅ working; verified in browser |
+| `Dockerfile` / `docker-compose.yml` | Containerized control plane. | ✅ `docker compose up --build` |
+| `.github/workflows/ci.yml` | CI: control-plane tests, RTL sims, C↔Python protocol, Docker build. | ✅ green |
 | `PROTOCOL.md` | The shared binary frame format (C ⇄ Python). | ✅ |
+
+## Run with Docker
+
+```bash
+docker compose up --build      # control plane on http://localhost:8000
+# then, for the UI:
+cd dashboard && npm install && npm run dev   # http://localhost:5174
+```
+
+## CI
+
+Every push runs three jobs (see `.github/workflows/ci.yml`):
+1. **Control plane** — `verify_approvals.py` + `verify_auth.py` (approval workflow,
+   the SPOF guardrail, auth/RBAC/audit).
+2. **FPGA + embedded** — trains the model, generates `scorer.v`, runs the RTL
+   correctness + latency sims (Icarus Verilog), and the C↔Python protocol test.
+3. **Docker** — builds the control-plane image.
 
 ## Run everything (from PowerShell, with `C:\mingw64\bin` on PATH for gcc)
 
