@@ -69,12 +69,27 @@ class Incident(Base):
 
 
 class User(Base):
-    """An operator of the platform. Role gates what they can do (RBAC)."""
+    """An operator of the platform. Role gates what they can do (RBAC).
+
+    `token` is a static service token (for machine clients: gateway, dashboard).
+    `totp_secret` enables interactive MFA login → a short-lived session token.
+    """
     __tablename__ = "users"
-    id:    Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    name:  Mapped[str] = mapped_column(unique=True)
-    role:  Mapped[str]                          # viewer | operator | admin
-    token: Mapped[str] = mapped_column(unique=True)   # bearer token (demo auth)
+    id:          Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name:        Mapped[str] = mapped_column(unique=True)
+    role:        Mapped[str]                          # viewer | operator | admin
+    token:       Mapped[str] = mapped_column(unique=True)   # static service token
+    totp_secret: Mapped[Optional[str]]                # base32 TOTP secret
+
+
+class Session(Base):
+    """A short-lived session issued after a successful MFA login."""
+    __tablename__ = "sessions"
+    id:         Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    token:      Mapped[str] = mapped_column(unique=True)
+    user_name:  Mapped[str] = mapped_column(ForeignKey("users.name"))
+    expires_at: Mapped[datetime]
+    revoked:    Mapped[bool] = mapped_column(default=False)
 
 
 class AuditLog(Base):

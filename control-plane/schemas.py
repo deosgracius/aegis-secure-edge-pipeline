@@ -21,3 +21,9 @@ class DecisionIn(BaseModel):
     approved: bool
     by: str
     note: str = ""
+
+
+class LoginIn(BaseModel):
+    """MFA login: username + a 6-digit TOTP code from an authenticator app."""
+    username: str
+    totp: str

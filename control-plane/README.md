@@ -56,6 +56,21 @@ the authenticated actor — the actor is never taken from the request body.
 The upgrade path keeps the same role checks: swap the static tokens for
 OAuth/OIDC + MFA-issued sessions.
 
+## MFA (TOTP)
+
+Human operators log in with a second factor. Each user has a TOTP secret; an
+authenticator app (Google Authenticator, Authy, …) generates 6-digit codes.
+
+- `POST /auth/login {username, totp}` → verifies the code, returns a short-lived
+  session token (1 h) usable as the bearer token, carrying the user's role.
+- `POST /auth/logout` → revokes the session.
+- `GET /auth/provisioning-uri?username=…` (admin) → an `otpauth://` URI to enroll
+  an authenticator (render it as a QR code).
+
+Static service tokens (machine clients) and MFA session tokens both authenticate;
+`store.resolve_token` accepts either. Verified end to end in `verify_mfa.py`
+(valid/invalid codes, session expiry, logout revocation, enrollment, audit).
+
 ## What it proves
 
 - Gateway verdicts now have a home; suspicious ones **auto-open incidents** with a

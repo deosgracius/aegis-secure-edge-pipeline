@@ -21,6 +21,9 @@ jobs:
       - name: Auth / RBAC / audit tests
         working-directory: control-plane
         run: python verify_auth.py
+      - name: MFA (TOTP) login tests
+        working-directory: control-plane
+        run: python verify_mfa.py
 
   fpga-embedded:
     name: FPGA scorer + embedded protocol

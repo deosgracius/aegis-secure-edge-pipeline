@@ -8,18 +8,28 @@ the logic. This is also where the knowledge graph plugs into the control plane.
 
 import json
 import os
+import secrets
 import sys
+from datetime import datetime, timedelta
 
-from db import (AuditLog, Device, Incident, Investigation, SessionLocal,
-                Telemetry, User, init_db)
+import pyotp
 
-# Demo users. In production these come from an identity provider (OAuth/OIDC)
-# and tokens are short-lived + MFA-gated; the role checks stay identical.
+from db import (AuditLog, Device, Incident, Investigation, Session,
+                SessionLocal, Telemetry, User, init_db)
+
+# Demo users. Each has a static service token (machine clients: gateway,
+# dashboard) AND a TOTP secret for interactive MFA login. In production these
+# come from an identity provider (OAuth/OIDC); the role checks stay identical.
 DEMO_USERS = [
-    {"name": "viewer",   "role": "viewer",   "token": "viewer-demo-token"},
-    {"name": "operator", "role": "operator", "token": "operator-demo-token"},
-    {"name": "admin",    "role": "admin",    "token": "admin-demo-token"},
+    {"name": "viewer",   "role": "viewer",   "token": "viewer-demo-token",
+     "totp": "JBSWY3DPEHPK3PXA"},
+    {"name": "operator", "role": "operator", "token": "operator-demo-token",
+     "totp": "JBSWY3DPEHPK3PXB"},
+    {"name": "admin",    "role": "admin",    "token": "admin-demo-token",
+     "totp": "JBSWY3DPEHPK3PXC"},
 ]
+
+SESSION_TTL_SECONDS = 3600   # MFA session lifetime
 
 # pull in the knowledge-graph queries from the sibling folder
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -41,7 +51,8 @@ def setup():
                              criticality=a["criticality"], status="active"))
         for u in DEMO_USERS:
             if not s.query(User).filter(User.name == u["name"]).first():
-                s.add(User(name=u["name"], role=u["role"], token=u["token"]))
+                s.add(User(name=u["name"], role=u["role"], token=u["token"],
+                           totp_secret=u.get("totp")))
         s.commit()
 
 
@@ -49,9 +60,70 @@ def setup():
 # auth + audit
 # ---------------------------------------------------------------------------
 def get_user_by_token(token):
+    """Resolve a static service token to a user (machine clients)."""
     with SessionLocal() as s:
         u = s.query(User).filter(User.token == token).first()
         return {"name": u.name, "role": u.role} if u else None
+
+
+def resolve_token(token):
+    """Resolve a bearer token to a user: a static service token OR a live
+    MFA session token (unexpired, not revoked). Returns None if neither."""
+    u = get_user_by_token(token)
+    if u:
+        return u
+    with SessionLocal() as s:
+        sess = (s.query(Session)
+                 .filter(Session.token == token, Session.revoked == False)  # noqa: E712
+                 .first())
+        if sess is None or sess.expires_at < datetime.utcnow():
+            return None
+        user = s.query(User).filter(User.name == sess.user_name).first()
+        return {"name": user.name, "role": user.role} if user else None
+
+
+# ---------------------------------------------------------------------------
+# MFA (TOTP) login
+# ---------------------------------------------------------------------------
+def verify_totp(username, code):
+    """Check a TOTP code for a user. Returns the user dict on success, else None."""
+    with SessionLocal() as s:
+        u = s.query(User).filter(User.name == username).first()
+        if u is None or not u.totp_secret:
+            return None
+        if pyotp.TOTP(u.totp_secret).verify(str(code), valid_window=1):
+            return {"name": u.name, "role": u.role}
+        return None
+
+
+def create_session(user_name):
+    """Issue a short-lived session token after a successful MFA login."""
+    token = "sess-" + secrets.token_urlsafe(24)
+    expires = datetime.utcnow() + timedelta(seconds=SESSION_TTL_SECONDS)
+    with SessionLocal() as s:
+        s.add(Session(token=token, user_name=user_name, expires_at=expires))
+        s.commit()
+    return {"token": token, "expires_at": expires.isoformat() + "Z"}
+
+
+def revoke_session(token):
+    with SessionLocal() as s:
+        sess = s.query(Session).filter(Session.token == token).first()
+        if sess:
+            sess.revoked = True
+            s.commit()
+            return True
+        return False
+
+
+def provisioning_uri(username):
+    """otpauth:// URI to enroll a user's authenticator app (QR-code payload)."""
+    with SessionLocal() as s:
+        u = s.query(User).filter(User.name == username).first()
+        if u is None or not u.totp_secret:
+            return None
+        return pyotp.TOTP(u.totp_secret).provisioning_uri(
+            name=username, issuer_name="AEGIS")
 
 
 def write_audit(actor, action, detail):

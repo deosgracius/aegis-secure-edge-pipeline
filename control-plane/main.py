@@ -16,11 +16,11 @@ Demo tokens are seeded by store.setup(): viewer-demo-token / operator-demo-token
 
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 
 import store
 from auth import require_role
-from schemas import DecisionIn, StatusIn, TelemetryIn
+from schemas import DecisionIn, LoginIn, StatusIn, TelemetryIn
 
 
 @asynccontextmanager
@@ -36,6 +36,36 @@ app = FastAPI(title="AEGIS Control Plane", version="0.2.0", lifespan=lifespan)
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+# ---- MFA login (open) ----
+@app.post("/auth/login")
+def login(body: LoginIn):
+    """Exchange username + a valid TOTP code for a short-lived session token."""
+    user = store.verify_totp(body.username, body.totp)
+    if user is None:
+        store.write_audit(body.username, "login_failed", "bad username or TOTP code")
+        raise HTTPException(status_code=401, detail="invalid credentials")
+    sess = store.create_session(user["name"])
+    store.write_audit(user["name"], "login", "MFA session issued")
+    return {"token": sess["token"], "role": user["role"],
+            "expires_at": sess["expires_at"]}
+
+
+@app.post("/auth/logout")
+def logout(authorization: str = Header(default="")):
+    token = authorization.split(" ", 1)[1].strip() if " " in authorization else ""
+    store.revoke_session(token)
+    return {"status": "logged out"}
+
+
+@app.get("/auth/provisioning-uri")
+def provisioning_uri(username: str, user=Depends(require_role("admin"))):
+    """otpauth:// URI to enroll a user's authenticator (admin only)."""
+    uri = store.provisioning_uri(username)
+    if uri is None:
+        raise HTTPException(status_code=404, detail="no such user / no TOTP secret")
+    return {"username": username, "otpauth_uri": uri}
 
 
 # ---- reads (viewer+) ----

@@ -25,9 +25,9 @@ def get_current_user(authorization: str = Header(default="")):
     if not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="missing bearer token")
     token = authorization.split(" ", 1)[1].strip()
-    user = store.get_user_by_token(token)
+    user = store.resolve_token(token)   # static service token OR live MFA session
     if user is None:
-        raise HTTPException(status_code=401, detail="invalid token")
+        raise HTTPException(status_code=401, detail="invalid or expired token")
     return user
 
 
