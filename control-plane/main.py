@@ -68,6 +68,34 @@ def provisioning_uri(username: str, user=Depends(require_role("admin"))):
     return {"username": username, "otpauth_uri": uri}
 
 
+# ---- OAuth / OIDC (Google SSO) ----
+@app.get("/auth/oauth/login")
+def oauth_login_start():
+    """Return the Google authorization URL for the browser to redirect to."""
+    import secrets as _secrets
+    import config
+    import oauth
+    if not config.oauth_configured():
+        raise HTTPException(status_code=503, detail="Google OAuth not configured")
+    state = _secrets.token_urlsafe(12)
+    return {"authorization_url": oauth.build_authorization_url(state), "state": state}
+
+
+@app.get("/auth/oauth/callback")
+def oauth_callback(code: str, state: str = ""):
+    """Google redirects here; exchange the code and issue a session."""
+    import oauth
+    email = oauth.exchange_code(code)
+    if email is None:
+        raise HTTPException(status_code=401, detail="OAuth exchange failed")
+    result = store.oauth_login(email)
+    if result is None:
+        store.write_audit(email, "oauth_denied", "email not allow-listed")
+        raise HTTPException(status_code=403, detail="email not authorized")
+    store.write_audit(email, "oauth_login", "SSO session issued")
+    return result
+
+
 # ---- reads (viewer+) ----
 @app.get("/stats")
 def stats(user=Depends(require_role("viewer"))):

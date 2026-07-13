@@ -10,6 +10,9 @@ behind a human approval gate.
 This repo is being built **bottom-up, vertical-slice first**. What works today
 runs entirely on a laptop — no FPGA board, no sensor hardware required.
 
+📐 **[ARCHITECTURE.md](ARCHITECTURE.md)** — system diagram, the trust spine, and
+the security model.
+
 ## Layers (and status)
 
 | Folder | Layer | Status |

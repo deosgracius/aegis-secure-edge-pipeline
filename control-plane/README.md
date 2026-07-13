@@ -71,6 +71,19 @@ Static service tokens (machine clients) and MFA session tokens both authenticate
 `store.resolve_token` accepts either. Verified end to end in `verify_mfa.py`
 (valid/invalid codes, session expiry, logout revocation, enrollment, audit).
 
+## OAuth / OIDC (Google SSO)
+
+- `GET /auth/oauth/login` → the Google authorization URL to redirect to (503 if
+  `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` aren't set).
+- `GET /auth/oauth/callback?code=…` → exchanges the code, reads the verified
+  email from Google's userinfo endpoint, maps it through an allow-list to a role,
+  and issues a session token (same session mechanism as MFA).
+
+The allow-list is `AEGIS_OAUTH_ALLOWLIST` (`email:role,…`) — personal emails stay
+out of the repo. Credentials load from env or the project-root `.env.txt`. The
+email→role→session mapping is unit-tested in `verify_oauth.py`; the live Google
+round-trip needs a real consent screen (browser), so it isn't part of CI.
+
 ## What it proves
 
 - Gateway verdicts now have a home; suspicious ones **auto-open incidents** with a

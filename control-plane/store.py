@@ -126,6 +126,42 @@ def provisioning_uri(username):
             name=username, issuer_name="AEGIS")
 
 
+# ---------------------------------------------------------------------------
+# OAuth / OIDC (Google) -- email -> role allow-list -> session
+# ---------------------------------------------------------------------------
+def _oauth_allowlist():
+    """email -> role, from env AEGIS_OAUTH_ALLOWLIST ("a@x:admin,b@y:operator").
+    Personal emails stay out of the repo — set them via the env var. Defaults
+    are example.com placeholders so the flow is demonstrable and testable."""
+    raw = os.environ.get("AEGIS_OAUTH_ALLOWLIST",
+                         "admin@example.com:admin,operator@example.com:operator")
+    out = {}
+    for pair in raw.split(","):
+        if ":" in pair:
+            email, role = pair.split(":", 1)
+            out[email.strip().lower()] = role.strip()
+    return out
+
+
+def oauth_login(email):
+    """Map a verified, allow-listed email to a role and issue a session token.
+    Returns None if the email is not allow-listed."""
+    if not email:
+        return None
+    role = _oauth_allowlist().get(email.lower())
+    if role is None:
+        return None
+    with SessionLocal() as s:
+        u = s.query(User).filter(User.name == email).first()
+        if u is None:
+            s.add(User(name=email, role=role,
+                       token="oauth-" + secrets.token_urlsafe(12)))
+            s.commit()
+    sess = create_session(email)
+    return {"token": sess["token"], "role": role, "email": email,
+            "expires_at": sess["expires_at"]}
+
+
 def write_audit(actor, action, detail):
     with SessionLocal() as s:
         s.add(AuditLog(actor=actor, action=action, detail=detail))

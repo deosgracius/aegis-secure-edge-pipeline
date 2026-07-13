@@ -24,6 +24,9 @@ jobs:
       - name: MFA (TOTP) login tests
         working-directory: control-plane
         run: python verify_mfa.py
+      - name: OAuth (email -> role -> session) tests
+        working-directory: control-plane
+        run: python verify_oauth.py
       - name: End-to-end pipeline (node frame -> quarantine)
         run: python e2e_pipeline.py
 
