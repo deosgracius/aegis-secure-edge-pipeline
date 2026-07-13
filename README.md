@@ -36,11 +36,17 @@ cd dashboard && npm install && npm run dev   # http://localhost:5174
 ## CI
 
 Every push runs three jobs (see `.github/workflows/ci.yml`):
-1. **Control plane** — `verify_approvals.py` + `verify_auth.py` (approval workflow,
-   the SPOF guardrail, auth/RBAC/audit).
-2. **FPGA + embedded** — trains the model, generates `scorer.v`, runs the RTL
+1. **Control plane** — `verify_approvals`, `verify_auth`, `verify_mfa` (approval
+   workflow, SPOF guardrail, auth/RBAC/audit, TOTP MFA), plus `e2e_pipeline.py`
+   (a synthetic attack driven node-frame → gateway → scorer → incident →
+   quarantine, with the guardrail protecting the gateway).
+2. **FPGA + embedded** — trains the model, generates `scorer.v`, runs the model
+   [evaluation report](fpga-scorer/EVAL_REPORT.md) (regression-gated), the RTL
    correctness + latency sims (Icarus Verilog), and the C↔Python protocol test.
 3. **Docker** — builds the control-plane image.
+
+Model quality (`fpga-scorer/eval_report.py`): **99.7% accuracy, 99.6% recall,
+F1 0.997, 0.30% false-positive rate**, per-attack recall ~100%.
 
 ## Run everything (from PowerShell, with `C:\mingw64\bin` on PATH for gcc)
 

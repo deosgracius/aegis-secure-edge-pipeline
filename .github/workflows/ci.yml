@@ -24,6 +24,8 @@ jobs:
       - name: MFA (TOTP) login tests
         working-directory: control-plane
         run: python verify_mfa.py
+      - name: End-to-end pipeline (node frame -> quarantine)
+        run: python e2e_pipeline.py
 
   fpga-embedded:
     name: FPGA scorer + embedded protocol
@@ -38,6 +40,9 @@ jobs:
       - name: Train model + generate Verilog
         working-directory: fpga-scorer
         run: python build.py
+      - name: Model evaluation report (regression gate)
+        working-directory: fpga-scorer
+        run: python eval_report.py
       - name: RTL correctness (hardware == Python, 500 vectors)
         working-directory: fpga-scorer
         run: |

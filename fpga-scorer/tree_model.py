@@ -77,6 +77,40 @@ def generate_dataset(n, seed=0):
     return X, y
 
 
+# Same distributions as generate_dataset, but also returns the attack TYPE per
+# sample (for per-attack-type recall in the eval report). Separate function so
+# the trained model is never affected.
+ATTACK_KINDS = ["flood", "replay", "bursty-timing", "undersized"]
+
+
+def generate_typed_dataset(n, seed=0):
+    """Return (X, y, kinds). kinds[i] in {'normal', *ATTACK_KINDS}."""
+    rng = random.Random(seed)
+    X, y, kinds = [], [], []
+    for _ in range(n):
+        pkt_rate = rng.gauss(300, 60)
+        pkt_size = rng.gauss(512, 80)
+        seq_gap = abs(rng.gauss(1, 0.7))
+        iat_var = abs(rng.gauss(5, 2))
+        if rng.random() < 0.5:
+            kind, label = "normal", 0
+        else:
+            knob = rng.randint(0, 3)
+            if knob == 0:
+                pkt_rate = rng.gauss(1100, 200); kind = "flood"
+            elif knob == 1:
+                seq_gap = rng.gauss(40, 12); kind = "replay"
+            elif knob == 2:
+                iat_var = rng.gauss(80, 25); kind = "bursty-timing"
+            else:
+                pkt_size = rng.gauss(60, 15); kind = "undersized"
+            label = 1
+        X.append([pkt_rate, pkt_size, seq_gap, iat_var])
+        y.append(label)
+        kinds.append(kind)
+    return X, y, kinds
+
+
 # ---------------------------------------------------------------------------
 # 2. TRAIN  --  grow a small decision tree (the CART algorithm, by hand)
 # ---------------------------------------------------------------------------
