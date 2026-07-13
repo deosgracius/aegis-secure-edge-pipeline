@@ -31,6 +31,9 @@ same-origin calls and there is no CORS setup.
 
 ## What it shows
 
+- **Live Topology** — an SVG graph of the devices (nodes laid out by tier) and
+  the knowledge-graph links between them, colored by status; a quarantined node
+  turns red with an ✕. Fed by `GET /topology`.
 - **Topology & Devices** — every device, its criticality (colored dot), and live
   status (active / quarantined).
 - **Anomaly Feed** — incidents opened by suspicious FPGA verdicts.

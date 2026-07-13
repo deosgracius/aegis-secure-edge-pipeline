@@ -208,6 +208,20 @@ def counts():
 # ---------------------------------------------------------------------------
 # the knowledge graph, exposed through the control plane
 # ---------------------------------------------------------------------------
+def topology_graph():
+    """Nodes (devices + live status) and edges (knowledge-graph links) for the
+    dashboard's topology view."""
+    devices = {d["id"]: d for d in list_devices()}
+    nodes = []
+    for did, a in topology.DEVICES.items():
+        live = devices.get(did, {})
+        nodes.append({"id": did, "name": a["name"], "type": a["type"],
+                      "criticality": a["criticality"],
+                      "status": live.get("status", "active")})
+    edges = [{"source": s, "target": t, "flow": f} for s, t, f in topology.LINKS]
+    return {"nodes": nodes, "edges": edges}
+
+
 def device_impact(device_id):
     """What breaks if we quarantine this device? (used before remediation)"""
     if device_id not in topology.DEVICES:

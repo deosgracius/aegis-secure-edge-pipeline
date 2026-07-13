@@ -54,8 +54,11 @@ header {
   background: #3a1f1a; color: var(--red); border: 1px solid var(--red);
 }
 
+.graph-panel { margin-top: 20px; }
+.graph-panel .panel-body { padding: 16px; max-height: none; }
+
 main {
-  display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 16px; margin-top: 20px;
+  display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 16px; margin-top: 16px;
 }
 @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
 

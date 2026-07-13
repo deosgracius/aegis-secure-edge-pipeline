@@ -45,6 +45,18 @@ async function get<T>(path: string): Promise<T> {
   return r.json();
 }
 
+export type Topology = {
+  nodes: {
+    id: string;
+    name: string;
+    type: string;
+    criticality: string;
+    status: string;
+  }[];
+  edges: { source: string; target: string; flow: string }[];
+};
+
+export const getTopology = () => get<Topology>("/topology");
 export const getDevices = () => get<Device[]>("/devices");
 export const getIncidents = () => get<Incident[]>("/incidents");
 export const getApprovals = () => get<Investigation[]>("/approvals");

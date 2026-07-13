@@ -5,9 +5,11 @@ import {
   getDevices,
   getIncidents,
   getStats,
+  getTopology,
   type Device,
   type Incident,
   type Investigation,
+  type Topology,
 } from "./api";
 
 const OPERATOR = "operator-deo";
@@ -17,20 +19,23 @@ export default function App() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [approvals, setApprovals] = useState<Investigation[]>([]);
   const [stats, setStats] = useState<Record<string, number>>({});
+  const [topology, setTopology] = useState<Topology | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [d, i, a, s] = await Promise.all([
+      const [d, i, a, s, t] = await Promise.all([
         getDevices(),
         getIncidents(),
         getApprovals(),
         getStats(),
+        getTopology(),
       ]);
       setDevices(d);
       setIncidents(i);
       setApprovals(a);
       setStats(s);
+      setTopology(t);
       setError(null);
     } catch (e) {
       setError((e as Error).message);
@@ -64,6 +69,15 @@ export default function App() {
       </header>
 
       {error && <div className="error">backend unreachable: {error}</div>}
+
+      {topology && (
+        <section className="panel graph-panel">
+          <h2>Live Topology</h2>
+          <div className="panel-body">
+            <TopologyGraph topo={topology} />
+          </div>
+        </section>
+      )}
 
       <main>
         <Panel title="Topology & Devices">
@@ -116,6 +130,67 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 
 function Empty({ children }: { children: React.ReactNode }) {
   return <div className="empty">{children}</div>;
+}
+
+function TopologyGraph({ topo }: { topo: Topology }) {
+  const W = 900;
+  const H = 230;
+  const colOf: Record<string, number> = {
+    sensor: 0, gateway: 1, accelerator: 2, server: 2, ui: 3,
+  };
+  const colX = [110, 360, 610, 820];
+  const crit: Record<string, string> = {
+    high: "#e5604d", medium: "#e8a13a", low: "#5bbf7a",
+  };
+
+  const byCol: Record<number, Topology["nodes"]> = { 0: [], 1: [], 2: [], 3: [] };
+  topo.nodes.forEach((n) => byCol[colOf[n.type] ?? 2].push(n));
+
+  const pos: Record<string, { x: number; y: number }> = {};
+  Object.entries(byCol).forEach(([c, nodes]) => {
+    const x = colX[Number(c)];
+    nodes.forEach((n, i) => {
+      pos[n.id] = { x, y: (H / (nodes.length + 1)) * (i + 1) };
+    });
+  });
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }}>
+      {topo.edges.map((e, idx) => {
+        const a = pos[e.source];
+        const b = pos[e.target];
+        if (!a || !b) return null;
+        return (
+          <line key={idx} x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+                stroke="#4a3f30" strokeWidth={1.5} />
+        );
+      })}
+      {topo.nodes.map((n) => {
+        const p = pos[n.id];
+        if (!p) return null;
+        const quar = n.status === "quarantined";
+        return (
+          <g key={n.id}>
+            <circle cx={p.x} cy={p.y} r={13}
+                    fill={quar ? "#3a1f1a" : "#1d3324"}
+                    stroke={crit[n.criticality] ?? "#888780"} strokeWidth={2.5} />
+            {quar && (
+              <text x={p.x} y={p.y + 4} textAnchor="middle" fontSize={13} fill="#e5604d">
+                ✕
+              </text>
+            )}
+            <text x={p.x} y={p.y + 30} textAnchor="middle" fontSize={12} fill="#f2ebe0">
+              {n.name}
+            </text>
+            <text x={p.x} y={p.y + 44} textAnchor="middle" fontSize={10}
+                  fill={quar ? "#e5604d" : "#a89a86"}>
+              {quar ? "quarantined" : n.type}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
 }
 
 function DeviceRow({ d }: { d: Device }) {

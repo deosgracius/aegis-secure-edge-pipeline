@@ -79,6 +79,12 @@ def devices(user=Depends(require_role("viewer"))):
     return store.list_devices()
 
 
+@app.get("/topology")
+def topology(user=Depends(require_role("viewer"))):
+    """Nodes + edges for the dashboard topology graph."""
+    return store.topology_graph()
+
+
 @app.get("/incidents")
 def incidents(status: str | None = None, user=Depends(require_role("viewer"))):
     return store.list_incidents(status)
