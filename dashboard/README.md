@@ -29,6 +29,13 @@ npm run dev     # http://localhost:5174
 The Vite dev server proxies `/api/*` to the backend, so the browser makes
 same-origin calls and there is no CORS setup.
 
+## Sign in
+
+The dashboard gates on a login screen: **MFA** (username + a 6-digit TOTP code →
+`/auth/login`), **Continue with Google** (OIDC, if configured), or a **demo
+operator** shortcut. The session token is kept in `localStorage`; a 401 (expired
+session) bounces back to the login screen. "Sign out" clears it.
+
 ## What it shows
 
 - **Live Topology** — an SVG graph of the devices (nodes laid out by tier) and

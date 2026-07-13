@@ -34,13 +34,45 @@ export type Investigation = {
   ts: string;
 };
 
-// Demo auth: the dashboard acts as the "operator". In a real deployment this
-// token comes from a login / OAuth flow, not a constant.
-const TOKEN = "operator-demo-token";
-const authHeaders = { Authorization: `Bearer ${TOKEN}` };
+// The bearer token is obtained by logging in (MFA or Google SSO) and kept in
+// localStorage. A demo shortcut uses the static operator service token.
+let _token = localStorage.getItem("aegis_token") || "";
+
+export const hasToken = () => !!_token;
+export function setToken(t: string) {
+  _token = t;
+  localStorage.setItem("aegis_token", t);
+}
+export function clearToken() {
+  _token = "";
+  localStorage.removeItem("aegis_token");
+}
+function authHeaders(): Record<string, string> {
+  return _token ? { Authorization: `Bearer ${_token}` } : {};
+}
+
+export async function loginMfa(username: string, totp: string) {
+  const r = await fetch("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, totp }),
+  });
+  if (!r.ok) throw new Error("login failed");
+  const data = await r.json();
+  setToken(data.token);
+  return data;
+}
+
+export async function oauthStart() {
+  const r = await fetch("/api/auth/oauth/login");
+  if (!r.ok) throw new Error("Google SSO not configured");
+  const { authorization_url } = await r.json();
+  window.location.href = authorization_url;
+}
 
 async function get<T>(path: string): Promise<T> {
-  const r = await fetch("/api" + path, { headers: authHeaders });
+  const r = await fetch("/api" + path, { headers: authHeaders() });
+  if (r.status === 401) clearToken(); // session expired -> back to login
   if (!r.ok) throw new Error(`${path} -> ${r.status}`);
   return r.json();
 }
@@ -71,7 +103,7 @@ export async function decide(
 ): Promise<Investigation> {
   const r = await fetch(`/api/investigations/${invId}/decision`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...authHeaders },
+    headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ approved, by, note }),
   });
   if (!r.ok) throw new Error(`decision -> ${r.status}`);

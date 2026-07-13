@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  clearToken,
   decide,
   getApprovals,
   getDevices,
   getIncidents,
   getStats,
   getTopology,
+  hasToken,
+  loginMfa,
+  oauthStart,
+  setToken,
   type Device,
   type Incident,
   type Investigation,
@@ -15,6 +20,7 @@ import {
 const OPERATOR = "operator-deo";
 
 export default function App() {
+  const [authed, setAuthed] = useState(hasToken());
   const [devices, setDevices] = useState<Device[]>([]);
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [approvals, setApprovals] = useState<Investigation[]>([]);
@@ -23,6 +29,10 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
+    if (!hasToken()) {
+      setAuthed(false);
+      return;
+    }
     try {
       const [d, i, a, s, t] = await Promise.all([
         getDevices(),
@@ -43,15 +53,23 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!authed) return;
     refresh();
     const t = setInterval(refresh, 3000);
     return () => clearInterval(t);
-  }, [refresh]);
+  }, [authed, refresh]);
 
   const act = async (id: number, approved: boolean) => {
     await decide(id, approved, OPERATOR);
     refresh();
   };
+
+  const logout = () => {
+    clearToken();
+    setAuthed(false);
+  };
+
+  if (!authed) return <Login onLogin={() => setAuthed(true)} />;
 
   return (
     <div className="app">
@@ -65,6 +83,9 @@ export default function App() {
           <Stat label="telemetry" value={stats.telemetry} />
           <Stat label="open incidents" value={stats.open_incidents} warn />
           <Stat label="awaiting approval" value={approvals.length} warn />
+          <button className="logout" onClick={logout} title="sign out">
+            sign out
+          </button>
         </div>
       </header>
 
@@ -106,6 +127,73 @@ export default function App() {
           ))}
         </Panel>
       </main>
+    </div>
+  );
+}
+
+function Login({ onLogin }: { onLogin: () => void }) {
+  const [username, setUsername] = useState("operator");
+  const [totp, setTotp] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setErr(null);
+    try {
+      await loginMfa(username, totp);
+      onLogin();
+    } catch {
+      setErr("Invalid username or code");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const google = async () => {
+    try {
+      await oauthStart();
+    } catch {
+      setErr("Google sign-in isn't configured on this server");
+    }
+  };
+
+  const demo = () => {
+    setToken("operator-demo-token");
+    onLogin();
+  };
+
+  return (
+    <div className="login-wrap">
+      <form className="login" onSubmit={submit}>
+        <div className="brand">
+          <span className="logo">◈</span> AEGIS
+        </div>
+        <div className="login-sub">Sign in to Security Operations</div>
+
+        <label>Username</label>
+        <input value={username} onChange={(e) => setUsername(e.target.value)}
+               autoComplete="username" />
+
+        <label>Authenticator code</label>
+        <input value={totp} onChange={(e) => setTotp(e.target.value)}
+               placeholder="6-digit TOTP" inputMode="numeric" autoComplete="one-time-code" />
+
+        {err && <div className="login-err">{err}</div>}
+
+        <button className="login-primary" type="submit" disabled={busy}>
+          {busy ? "Verifying…" : "Sign in with MFA"}
+        </button>
+
+        <div className="login-or">or</div>
+        <button className="login-google" type="button" onClick={google}>
+          Continue with Google
+        </button>
+        <button className="login-demo" type="button" onClick={demo}>
+          Use demo operator
+        </button>
+      </form>
     </div>
   );
 }

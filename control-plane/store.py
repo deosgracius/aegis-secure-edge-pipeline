@@ -29,7 +29,9 @@ DEMO_USERS = [
      "totp": "JBSWY3DPEHPK3PXC"},
 ]
 
-SESSION_TTL_SECONDS = 3600   # MFA session lifetime
+from settings import settings
+
+SESSION_TTL_SECONDS = settings.session_ttl_seconds   # MFA/OAuth session lifetime
 
 # pull in the knowledge-graph queries from the sibling folder
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),

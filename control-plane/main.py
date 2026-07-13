@@ -14,22 +14,48 @@ Demo tokens are seeded by store.setup(): viewer-demo-token / operator-demo-token
 / admin-demo-token. Mutating actions are recorded in the audit log.
 """
 
+import logging
+import time
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 
 import store
 from auth import require_role
 from schemas import DecisionIn, LoginIn, StatusIn, TelemetryIn
+from settings import settings
+
+logging.basicConfig(level=settings.log_level,
+                    format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+log = logging.getLogger("aegis")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     store.setup()          # create tables + seed devices + users on startup
+    log.info("%s v%s started", settings.app_name, settings.version)
     yield
 
 
-app = FastAPI(title="AEGIS Control Plane", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title=settings.app_name, version=settings.version, lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    t0 = time.perf_counter()
+    response = await call_next(request)
+    dt_ms = (time.perf_counter() - t0) * 1000
+    log.info("%s %s -> %d (%.1f ms)",
+             request.method, request.url.path, response.status_code, dt_ms)
+    return response
 
 
 # ---- liveness (open) ----

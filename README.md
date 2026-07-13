@@ -13,6 +13,14 @@ runs entirely on a laptop — no FPGA board, no sensor hardware required.
 📐 **[ARCHITECTURE.md](ARCHITECTURE.md)** — system diagram, the trust spine, and
 the security model.
 
+## Quick start
+
+```bash
+python run_demo.py     # narrates the full attack -> quarantine story (no setup)
+make test              # run every control-plane + pipeline + model check
+make run               # control plane on :8000   (make dashboard for the UI)
+```
+
 ## Layers (and status)
 
 | Folder | Layer | Status |
